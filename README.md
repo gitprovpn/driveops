@@ -2,11 +2,6 @@
 
 Demo tĩnh dùng để trải nghiệm trước trên website mobile và PC.
 
-## Đăng nhập
-
-- Username: `test`
-- Password: `test`
-
 ## Chạy local
 
 Mở trực tiếp file `index.html`, hoặc chạy:
