@@ -35,3 +35,412 @@ function lineSvg(){return `<svg viewBox="0 0 600 240" preserveAspectRatio="none"
 function barSvg(labels,vals){let max=Math.max(...vals), w=520/vals.length; return `<svg viewBox="0 0 600 240">${vals.map((v,i)=>{let h=v/max*160,x=45+i*w,y=200-h;return `<rect x="${x}" y="${y}" width="${w-26}" height="${h}" rx="8" fill="#1263f1" opacity="${.55+i*.07}"/><text x="${x+8}" y="220" font-size="13" fill="#66708c">${labels[i]}</text><text x="${x+6}" y="${y-8}" font-size="13" fill="#091538" font-weight="700">${v}</text>`}).join('')}</svg>`}
 function bind(){document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{state.page=b.dataset.page; app();}); document.querySelectorAll('.navbtn').forEach(b=>b.onclick=()=>{state.page=b.dataset.page; app();}); const lf=document.getElementById('loginForm'); if(lf) lf.onsubmit=e=>{e.preventDefault(); if(document.getElementById('u').value==='test'&&document.getElementById('p').value==='test'){state.logged=true; app()} else document.getElementById('err').classList.remove('hidden')}; const lo=document.getElementById('logout'); if(lo) lo.onclick=()=>{state.logged=false; app()}; const qr=document.getElementById('quickRole'); if(qr) qr.onchange=e=>{state.page=e.target.value; app()}; const mb=document.getElementById('menuBtn'); if(mb) mb.onclick=()=>{document.body.insertAdjacentHTML('beforeend',`<div class="modal" onclick="this.remove()"><div class="modal-card" onclick="event.stopPropagation()"><h3>Điều hướng</h3><div class="nav" style="display:grid;grid-template-columns:1fr 1fr">${['overview','student','teacher','academic','exam','sales','accounting','vehicle','director','architecture','gallery'].map(p=>`<button class="btn ghost" onclick="state.page='${p}';document.querySelector('.modal').remove();app()">${p}</button>`).join('')}</div></div></div>`)} }
 app();
+
+
+/* ============================================================
+   DriveOps Cloud - Integrated AI Assistant Chatbox
+   Purpose: Small floating AI widget for Director / Manager / Admin.
+   Mode: Rule-based demo, no API key required, runs on static hosting.
+   ============================================================ */
+(function DriveOpsAIChatboxIntegrated() {
+  "use strict";
+
+  const aiState = {
+    open: false,
+    messages: [
+      {
+        role: "bot",
+        text:
+          "Xin chào, tôi là AI Assistant. Tôi hỗ trợ Giám đốc / Quản lý / Admin tra cứu hồ sơ tồn đọng, công nợ, lịch đến hạn, xe rủi ro và gợi ý hướng xử lý."
+      }
+    ]
+  };
+
+  function aiEscape(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function getDriveOpsContext() {
+    return {
+      kpis: typeof kpis !== "undefined" ? kpis : {},
+      rows: typeof rows !== "undefined" ? rows : [],
+      vehicles: typeof vehicles !== "undefined" ? vehicles : [],
+      currentPage: typeof state !== "undefined" ? state.page : "overview",
+      currentRole: typeof state !== "undefined" ? state.role : "director"
+    };
+  }
+
+  function injectAIStyles() {
+    if (document.getElementById("driveops-ai-style")) return;
+
+    const style = document.createElement("style");
+    style.id = "driveops-ai-style";
+    style.textContent = `
+      .ai-fab {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 14px 18px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--blue, #1263f1), var(--purple, #6d42e7));
+        color: #fff;
+        border: 1px solid rgba(255,255,255,.35);
+        box-shadow: 0 20px 55px rgba(18, 99, 241, .35);
+        font-weight: 900;
+        cursor: pointer;
+        user-select: none;
+      }
+      .ai-fab:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 24px 64px rgba(18, 99, 241, .42);
+      }
+      .ai-fab.hidden {
+        display: none;
+      }
+      .ai-box {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 9999;
+        width: min(420px, calc(100vw - 28px));
+        height: 590px;
+        max-height: calc(100vh - 48px);
+        background: #fff;
+        border: 1px solid var(--line, #e2e9f5);
+        border-radius: 24px;
+        box-shadow: 0 26px 80px rgba(6, 22, 54, .24);
+        overflow: hidden;
+        display: none;
+        grid-template-rows: auto auto 1fr auto;
+      }
+      .ai-box.open {
+        display: grid;
+      }
+      .ai-head {
+        padding: 16px 18px;
+        color: #fff;
+        background: linear-gradient(135deg, #061636, #1263f1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .ai-head b {
+        font-size: 15px;
+      }
+      .ai-head small {
+        display: block;
+        opacity: .84;
+        font-size: 12px;
+        margin-top: 3px;
+      }
+      .ai-close {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 0;
+        color: #fff;
+        background: rgba(255,255,255,.16);
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .ai-quick {
+        display: flex;
+        gap: 8px;
+        padding: 10px;
+        overflow-x: auto;
+        border-bottom: 1px solid var(--line, #e2e9f5);
+        background: #fff;
+      }
+      .ai-quick button {
+        white-space: nowrap;
+        border: 1px solid #cfe0ff;
+        background: #f4f8ff;
+        color: var(--blue, #1263f1);
+        border-radius: 999px;
+        padding: 8px 10px;
+        font-weight: 800;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .ai-messages {
+        padding: 14px;
+        overflow: auto;
+        background: #f8fbff;
+      }
+      .ai-msg {
+        padding: 11px 13px;
+        border-radius: 16px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        line-height: 1.48;
+        white-space: pre-line;
+      }
+      .ai-msg.bot {
+        color: var(--ink, #091538);
+        background: #fff;
+        border: 1px solid var(--line, #e2e9f5);
+      }
+      .ai-msg.user {
+        color: #fff;
+        background: var(--blue, #1263f1);
+        margin-left: 34px;
+      }
+      .ai-input {
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid var(--line, #e2e9f5);
+        background: #fff;
+      }
+      .ai-input input {
+        min-width: 0;
+        flex: 1;
+        border: 1px solid var(--line, #e2e9f5);
+        border-radius: 14px;
+        padding: 12px;
+        outline: none;
+      }
+      .ai-input input:focus {
+        border-color: #8bb8ff;
+        box-shadow: 0 0 0 4px rgba(18,99,241,.08);
+      }
+      .ai-input button {
+        border: 0;
+        border-radius: 14px;
+        padding: 0 16px;
+        color: #fff;
+        background: var(--blue, #1263f1);
+        font-weight: 900;
+        cursor: pointer;
+      }
+      .ai-input button:hover {
+        background: var(--blue2, #0b50d9);
+      }
+      @media (max-width: 720px) {
+        .ai-box {
+          right: 10px;
+          bottom: 10px;
+          width: calc(100vw - 20px);
+          height: 72vh;
+        }
+        .ai-fab {
+          right: 16px;
+          bottom: 16px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function renderAI() {
+    injectAIStyles();
+
+    let root = document.getElementById("driveops-ai-root");
+    if (!root) {
+      root = document.createElement("div");
+      root.id = "driveops-ai-root";
+      document.body.appendChild(root);
+    }
+
+    const messagesHtml = aiState.messages
+      .map((m) => `<div class="ai-msg ${aiEscape(m.role)}">${aiEscape(m.text)}</div>`)
+      .join("");
+
+    root.innerHTML = `
+      <button class="ai-fab ${aiState.open ? "hidden" : ""}" id="aiOpen" type="button" title="AI Assistant">
+        🤖 <span>AI Assistant</span>
+      </button>
+
+      <section class="ai-box ${aiState.open ? "open" : ""}" aria-label="DriveOps AI Assistant">
+        <div class="ai-head">
+          <div>
+            <b>AI Assistant & Insights</b>
+            <small>Hỗ trợ Giám đốc / Quản lý / Admin</small>
+          </div>
+          <button class="ai-close" id="aiClose" type="button" aria-label="Đóng chatbox">×</button>
+        </div>
+
+        <div class="ai-quick">
+          <button type="button" data-aiq="Hồ sơ nào đang tồn đọng cần xử lý?">Hồ sơ tồn</button>
+          <button type="button" data-aiq="Những việc nào sắp đến hạn hôm nay?">Đến hạn</button>
+          <button type="button" data-aiq="Tình hình công nợ và học phí cần nhắc?">Công nợ</button>
+          <button type="button" data-aiq="Xe nào đang có rủi ro vận hành?">Xe rủi ro</button>
+          <button type="button" data-aiq="KPI nào giám đốc nên xem ngay?">KPI GĐ</button>
+        </div>
+
+        <div class="ai-messages" id="aiMessages">${messagesHtml}</div>
+
+        <form class="ai-input" id="aiForm">
+          <input id="aiText" placeholder="Hỏi AI: hồ sơ tồn, công nợ, xe rủi ro..." autocomplete="off">
+          <button type="submit">Gửi</button>
+        </form>
+      </section>
+    `;
+
+    bindAI();
+  }
+
+  function bindAI() {
+    const openBtn = document.getElementById("aiOpen");
+    const closeBtn = document.getElementById("aiClose");
+    const form = document.getElementById("aiForm");
+    const msgBox = document.getElementById("aiMessages");
+
+    if (openBtn) {
+      openBtn.onclick = () => {
+        aiState.open = true;
+        renderAI();
+      };
+    }
+
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        aiState.open = false;
+        renderAI();
+      };
+    }
+
+    document.querySelectorAll("[data-aiq]").forEach((button) => {
+      button.onclick = () => askAI(button.dataset.aiq);
+    });
+
+    if (form) {
+      form.onsubmit = (event) => {
+        event.preventDefault();
+        const input = document.getElementById("aiText");
+        const question = input.value.trim();
+        if (!question) return;
+        input.value = "";
+        askAI(question);
+      };
+    }
+
+    if (msgBox) {
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+  }
+
+  function askAI(question) {
+    aiState.messages.push({ role: "user", text: question });
+    aiState.messages.push({ role: "bot", text: generateAIAnswer(question) });
+    aiState.open = true;
+    renderAI();
+  }
+
+  function generateAIAnswer(question) {
+    const q = String(question || "").toLowerCase();
+    const ctx = getDriveOpsContext();
+    const studentRows = ctx.rows || [];
+    const vehicleRows = ctx.vehicles || [];
+    const dataKpis = ctx.kpis || {};
+
+    const overdueStudents = studentRows.filter((r) => {
+      const status = String(r[2] || "");
+      const fee = String(r[3] || "");
+      return fee.includes("Còn") || status.includes("Thi lại") || status.includes("Chờ");
+    });
+
+    const riskyVehicles = vehicleRows.filter((v) => {
+      const status = String(v[2] || "");
+      const alert = String(v[4] || "");
+      return status.includes("Bảo dưỡng") || alert !== "OK";
+    });
+
+    const summary =
+      `\n\nNgữ cảnh demo: ${studentRows.length} học viên mẫu, ${vehicleRows.length} xe mẫu, doanh thu ${dataKpis.revenue || "N/A"}, công nợ ${dataKpis.debt || "N/A"}, tỷ lệ đậu ${dataKpis.pass || "N/A"}.`;
+
+    if (q.includes("tồn") || q.includes("hồ sơ") || q.includes("đọng")) {
+      return (
+        `Tôi phát hiện ${overdueStudents.length} nhóm hồ sơ nên ưu tiên xử lý:\n` +
+        `• Nguyễn Văn An: đang học DAT nhưng còn 3.500.000đ, nên nhắc phí trước mốc DAT tiếp theo.\n` +
+        `• Trần Thị Mai: chờ thi tốt nghiệp, nên kiểm tra đủ điều kiện thi và lịch thi gần nhất.\n` +
+        `• Lê Quốc Bình: thi lại sa hình và còn phí thi lại, nên tạo phiếu thu + xếp lịch ôn sa hình.\n\n` +
+        `Gợi ý thao tác: mở Giáo vụ → lọc “Thiếu điều kiện / Chờ thi / Thi lại” → giao PIC theo khu vực.`
+      );
+    }
+
+    if (q.includes("hạn") || q.includes("deadline") || q.includes("hôm nay")) {
+      return (
+        `Các việc sắp đến hạn cần đưa vào danh sách điều hành:\n` +
+        `• 23 học viên chưa đóng phí đúng hạn.\n` +
+        `• 18 học viên sắp đến hạn sát hạch.\n` +
+        `• 5 xe sắp hết hạn đăng kiểm trong 7 ngày.\n` +
+        `• 3 xe đến lịch bảo dưỡng định kỳ.\n\n` +
+        `Gợi ý: phân loại Critical / High / Medium và giao việc cho Kế toán, Giáo vụ, Quản lý xe.` +
+        summary
+      );
+    }
+
+    if (q.includes("công nợ") || q.includes("học phí") || q.includes("thanh toán") || q.includes("nợ")) {
+      return (
+        `Công nợ demo đang hiển thị: ${dataKpis.debt || "N/A"}.\n\n` +
+        `Gợi ý xử lý:\n` +
+        `1. Nhóm còn nợ nhưng đang học DAT: nhắc phí trước khi đạt mốc 16h DAT.\n` +
+        `2. Nhóm thi lại còn phí: chưa mở lịch thi lại cho đến khi có phiếu thu.\n` +
+        `3. Kế toán xuất danh sách công nợ theo khu vực, gửi nhắc tự động hằng ngày.`
+      );
+    }
+
+    if (q.includes("xe") || q.includes("bảo dưỡng") || q.includes("odo") || q.includes("xăng") || q.includes("đăng kiểm")) {
+      return (
+        `Có ${riskyVehicles.length} xe cần chú ý:\n` +
+        `• 51A-123.45: sắp bảo dưỡng, cần kiểm tra lịch bảo dưỡng và ODO.\n` +
+        `• 51F-678.90: đăng kiểm còn 7 ngày, cần lên lịch gia hạn.\n` +
+        `• 51G-234.56: đang bảo dưỡng và tiêu hao cao, cần đối soát xăng/KM.\n\n` +
+        `Gợi ý: ưu tiên xử lý xe đang gắn với lịch DAT để tránh ảnh hưởng lịch học viên.`
+      );
+    }
+
+    if (q.includes("giám đốc") || q.includes("kpi") || q.includes("dashboard") || q.includes("quản lý")) {
+      return (
+        `5 KPI Giám đốc nên xem ngay:\n` +
+        `• Học viên đang học / chờ thi / thi lại.\n` +
+        `• Công nợ học phí và khoản quá hạn.\n` +
+        `• Tỷ lệ đậu / rớt sát hạch.\n` +
+        `• Xe rủi ro: đăng kiểm, bảo dưỡng, tiêu hao xăng.\n` +
+        `• Lịch học đang chờ giáo vụ phân công.\n\n` +
+        `AI widget đóng vai trò “management insight layer”, giúp hỏi nhanh thay vì tự lọc từng dashboard.`
+      );
+    }
+
+    return (
+      `Tôi có thể hỗ trợ tra cứu nhanh theo dữ liệu demo. Anh/chị có thể hỏi:\n` +
+      `• Hồ sơ tồn đọng\n` +
+      `• Việc sắp đến hạn\n` +
+      `• Công nợ học phí\n` +
+      `• Xe rủi ro\n` +
+      `• KPI cho giám đốc` +
+      summary
+    );
+  }
+
+  window.DriveOpsAI = {
+    open() {
+      aiState.open = true;
+      renderAI();
+    },
+    close() {
+      aiState.open = false;
+      renderAI();
+    },
+    ask: askAI
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderAI);
+  } else {
+    renderAI();
+  }
+})();
+
